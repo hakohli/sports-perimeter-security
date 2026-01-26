@@ -47,12 +47,25 @@ def test_frame_extraction(video_path, max_frames=10):
         # Simulate detection (in real system, this would be computer vision)
         # For demo, randomly detect "violations" in some frames
         if frame_count % 3 == 0:  # Simulate violation every 3rd frame
+            # Simulate player detection with names and teams
+            players = [
+                {'name': 'Cristiano Ronaldo', 'team': 'Home Team', 'number': 7},
+                {'name': 'Lionel Messi', 'team': 'Away Team', 'number': 10},
+                {'name': 'Neymar Jr', 'team': 'Home Team', 'number': 11},
+                {'name': 'Kylian Mbappe', 'team': 'Away Team', 'number': 9},
+                {'name': 'Mohamed Salah', 'team': 'Home Team', 'number': 14}
+            ]
+            
+            player = players[frame_count % len(players)]
+            
             violation = {
                 'frame_id': f"frame_{frame_count}",
                 'timestamp': datetime.utcnow().isoformat(),
                 'type': 'perimeter_breach',
                 'zone': 'sideline',
-                'subject': f'player_{frame_count % 5}',
+                'player_name': player['name'],
+                'player_number': player['number'],
+                'team': player['team'],
                 'position': [250 + frame_count * 10, 300],
                 'severity': 'warning'
             }
@@ -60,6 +73,8 @@ def test_frame_extraction(video_path, max_frames=10):
             print(f"⚠️  Frame {frame_count}: Potential violation detected")
             print(f"   Type: {violation['type']}")
             print(f"   Zone: {violation['zone']}")
+            print(f"   Player: {violation['player_name']} (#{violation['player_number']})")
+            print(f"   Team: {violation['team']}")
             
             # Analyze with AI
             ai_analysis = analyze_with_bedrock(violation, frame)
@@ -106,7 +121,8 @@ def analyze_with_bedrock(violation, frame):
 
 Type: {violation['type']}
 Zone: {violation['zone']}
-Subject: {violation['subject']}
+Player: {violation['player_name']} (#{violation['player_number']})
+Team: {violation['team']}
 
 CRITICAL REQUIREMENTS:
 1. ONLY report violations by PLAYERS (ignore audience, ground staff, coaches, referees)
@@ -117,7 +133,7 @@ Return JSON with:
 - valid: true ONLY if subject is a player AND violation is certain
 - severity: info/warning/violation/critical
 - action: recommended action
-- explanation: brief explanation including subject type (player/staff/audience)
+- explanation: brief explanation including player name and team
 - confidence: 1.0 (100% certain) or 0.0 (not certain or not a player)
 - subject_type: "player" or "non-player" (audience/staff/coach/referee)
 
@@ -208,7 +224,12 @@ Violation ID: {violation_id}
 Timestamp: {violation['timestamp']}
 Type: {violation['type']}
 Zone: {violation['zone']}
-Subject: {violation['subject']}
+
+Player Information
+------------------
+Name: {violation['player_name']}
+Number: #{violation['player_number']}
+Team: {violation['team']}
 Position: {violation['position']}
 
 AI Analysis
@@ -251,7 +272,9 @@ Frame: s3://sports-security-evidence/{s3_prefix}/frame.jpg
             'sport': 'soccer',
             'type': violation['type'],
             'zone': violation['zone'],
-            'subject': violation['subject'],
+            'player_name': violation['player_name'],
+            'player_number': str(violation['player_number']),
+            'team': violation['team'],
             'position': violation['position'],
             'severity': violation['ai_analysis']['severity'],
             'valid': violation['ai_analysis']['valid'],
