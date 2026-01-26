@@ -53,14 +53,20 @@ Subject: {violation_data.get('subject')}
 Position: {violation_data.get('position')}
 Timestamp: {violation_data.get('timestamp')}
 
-Analyze this potential violation and provide:
-1. Is this a valid violation? (true/false)
-2. Severity level: {', '.join(self.rules['severity_levels'])}
-3. Recommended action
-4. Explanation
-5. Confidence score (0-1)
+CRITICAL REQUIREMENTS:
+1. ONLY report violations by PLAYERS (ignore audience, ground staff, coaches, referees)
+2. ONLY return confidence: 1.0 if you are 100% certain this is a valid player violation
+3. Return confidence: 0.0 for anything else (non-players, uncertain situations)
 
-Return as JSON with keys: valid, severity, action, explanation, confidence
+Return JSON with:
+- valid: true ONLY if subject is a player AND violation is certain
+- severity: {', '.join(self.rules['severity_levels'])}
+- action: recommended action
+- explanation: brief explanation including subject type
+- confidence: 1.0 (100% certain) or 0.0 (not certain or not a player)
+- subject_type: "player" or "non-player" (audience/staff/coach/referee)
+
+Return ONLY valid JSON.
 """
         
         # Call Bedrock
@@ -81,14 +87,26 @@ Return as JSON with keys: valid, severity, action, explanation, confidence
         
         try:
             analysis = json.loads(analysis_text)
+            
+            # Enforce 100% confidence requirement
+            if analysis.get('confidence', 0) < 1.0:
+                analysis['valid'] = False
+                analysis['confidence'] = 0.0
+            
+            # Enforce player-only requirement
+            if analysis.get('subject_type') != 'player':
+                analysis['valid'] = False
+                analysis['confidence'] = 0.0
+                
         except:
             # Fallback if AI doesn't return valid JSON
             analysis = {
-                'valid': True,
-                'severity': 'warning',
-                'action': 'Review manually',
-                'explanation': analysis_text,
-                'confidence': 0.7
+                'valid': False,
+                'severity': 'info',
+                'action': 'Ignore - insufficient confidence',
+                'explanation': 'Unable to determine with 100% certainty',
+                'confidence': 0.0,
+                'subject_type': 'unknown'
             }
         
         return analysis

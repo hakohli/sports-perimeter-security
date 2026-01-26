@@ -71,10 +71,12 @@ def test_frame_extraction(video_path, max_frames=10):
                 # Store in DynamoDB
                 store_violation(violation, frame)
                 
-                print(f"   ✅ Confirmed by AI (confidence: {ai_analysis['confidence']})")
+                print(f"   ✅ Confirmed by AI (confidence: 100%)")
+                print(f"   Subject type: {ai_analysis.get('subject_type', 'player')}")
                 print(f"   Severity: {ai_analysis['severity']}")
             else:
-                print(f"   ℹ️  False positive - ignored")
+                reason = "Not a player" if ai_analysis.get('subject_type') != 'player' else "Confidence < 100%"
+                print(f"   ℹ️  Rejected - {reason}")
         
         frame_count += 1
         print(f"✓ Processed frame {frame_count}/{max_frames}")
@@ -106,14 +108,18 @@ Type: {violation['type']}
 Zone: {violation['zone']}
 Subject: {violation['subject']}
 
-This is a test of the sports security system. Provide a realistic analysis.
+CRITICAL REQUIREMENTS:
+1. ONLY report violations by PLAYERS (ignore audience, ground staff, coaches, referees)
+2. ONLY return confidence: 1.0 if you are 100% certain this is a valid player violation
+3. Return confidence: 0.0 for anything else (non-players, uncertain situations)
 
 Return JSON with:
-- valid: true/false
+- valid: true ONLY if subject is a player AND violation is certain
 - severity: info/warning/violation/critical
 - action: recommended action
-- explanation: brief explanation
-- confidence: 0.0-1.0
+- explanation: brief explanation including subject type (player/staff/audience)
+- confidence: 1.0 (100% certain) or 0.0 (not certain or not a player)
+- subject_type: "player" or "non-player" (audience/staff/coach/referee)
 
 Return ONLY valid JSON."""
 
@@ -136,14 +142,26 @@ Return ONLY valid JSON."""
         # Try to parse JSON
         try:
             analysis = json.loads(analysis_text)
+            
+            # Enforce 100% confidence requirement
+            if analysis.get('confidence', 0) < 1.0:
+                analysis['valid'] = False
+                analysis['confidence'] = 0.0
+            
+            # Enforce player-only requirement
+            if analysis.get('subject_type') != 'player':
+                analysis['valid'] = False
+                analysis['confidence'] = 0.0
+                
         except:
-            # Fallback
+            # Fallback - reject by default
             analysis = {
-                'valid': True,
-                'severity': 'warning',
-                'action': 'Review footage',
-                'explanation': 'Player near sideline boundary',
-                'confidence': 0.75
+                'valid': False,
+                'severity': 'info',
+                'action': 'Ignore - insufficient confidence',
+                'explanation': 'Unable to determine with 100% certainty',
+                'confidence': 0.0,
+                'subject_type': 'unknown'
             }
         
         return analysis
@@ -155,7 +173,8 @@ Return ONLY valid JSON."""
             'severity': 'info',
             'action': 'System error',
             'explanation': str(e),
-            'confidence': 0.0
+            'confidence': 0.0,
+            'subject_type': 'unknown'
         }
 
 def store_violation(violation, frame):
