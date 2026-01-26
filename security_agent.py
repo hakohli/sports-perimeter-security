@@ -114,19 +114,64 @@ Return ONLY valid JSON.
     def store_violation(self, violation_id, violation_data, ai_analysis, frame_data):
         """Store violation in DynamoDB and evidence in S3"""
         
-        # Store frame evidence in S3
-        evidence_key = f"violations/{violation_id}/frame.jpg"
+        # Create timestamp-based folder structure
+        from datetime import datetime
+        timestamp = datetime.fromisoformat(violation_data['timestamp'].replace('Z', '+00:00'))
+        date_folder = timestamp.strftime('%Y-%m-%d')
+        time_folder = timestamp.strftime('%H-%M-%S')
         
+        # S3 path: violations/2026-01-26/15-45-30/violation_id/
+        s3_prefix = f"violations/{date_folder}/{time_folder}/{violation_id}"
+        
+        # Store frame evidence in S3
         try:
             # Decode and upload frame
             frame_bytes = base64.b64decode(frame_data)
             s3.put_object(
                 Bucket=EVIDENCE_BUCKET,
-                Key=evidence_key,
+                Key=f"{s3_prefix}/frame.jpg",
                 Body=frame_bytes,
                 ContentType='image/jpeg'
             )
-            evidence_url = f"s3://{EVIDENCE_BUCKET}/{evidence_key}"
+            
+            # Create description text file
+            description = f"""Violation Report
+================
+
+Violation ID: {violation_id}
+Timestamp: {violation_data['timestamp']}
+Sport: {self.sport}
+Type: {violation_data['type']}
+Zone: {violation_data.get('zone')}
+Subject: {violation_data.get('subject')}
+Position: {violation_data.get('position')}
+
+AI Analysis
+-----------
+Severity: {ai_analysis['severity']}
+Confidence: {float(ai_analysis['confidence']) * 100:.0f}%
+Subject Type: {ai_analysis.get('subject_type', 'player')}
+Valid: {ai_analysis['valid']}
+
+Explanation:
+{ai_analysis['explanation']}
+
+Recommended Action:
+{ai_analysis['action']}
+
+Evidence:
+Frame: s3://{EVIDENCE_BUCKET}/{s3_prefix}/frame.jpg
+"""
+            
+            s3.put_object(
+                Bucket=EVIDENCE_BUCKET,
+                Key=f"{s3_prefix}/description.txt",
+                Body=description.encode('utf-8'),
+                ContentType='text/plain'
+            )
+            
+            evidence_url = f"s3://{EVIDENCE_BUCKET}/{s3_prefix}/"
+            
         except Exception as e:
             print(f"⚠️  Failed to store evidence: {e}")
             evidence_url = None
@@ -145,6 +190,7 @@ Return ONLY valid JSON.
             'severity': ai_analysis['severity'],
             'valid': ai_analysis['valid'],
             'confidence': str(ai_analysis['confidence']),
+            'subject_type': ai_analysis.get('subject_type', 'player'),
             'action': ai_analysis['action'],
             'explanation': ai_analysis['explanation'],
             'evidence_url': evidence_url,

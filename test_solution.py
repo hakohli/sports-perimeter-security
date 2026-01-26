@@ -182,16 +182,61 @@ def store_violation(violation, frame):
     
     violation_id = f"test_viol_{int(datetime.utcnow().timestamp() * 1000)}"
     
+    # Create timestamp-based folder structure
+    timestamp = datetime.utcnow()
+    date_folder = timestamp.strftime('%Y-%m-%d')
+    time_folder = timestamp.strftime('%H-%M-%S')
+    
+    # S3 path: violations/2026-01-26/15-45-30/violation_id/
+    s3_prefix = f"violations/{date_folder}/{time_folder}/{violation_id}"
+    
     # Store frame in S3
     try:
         _, buffer = cv2.imencode('.jpg', frame)
         s3.put_object(
             Bucket='sports-security-evidence',
-            Key=f"violations/{violation_id}/frame.jpg",
+            Key=f"{s3_prefix}/frame.jpg",
             Body=buffer.tobytes(),
             ContentType='image/jpeg'
         )
-        evidence_url = f"s3://sports-security-evidence/violations/{violation_id}/frame.jpg"
+        
+        # Create description text file
+        description = f"""Violation Report
+================
+
+Violation ID: {violation_id}
+Timestamp: {violation['timestamp']}
+Type: {violation['type']}
+Zone: {violation['zone']}
+Subject: {violation['subject']}
+Position: {violation['position']}
+
+AI Analysis
+-----------
+Severity: {violation['ai_analysis']['severity']}
+Confidence: {violation['ai_analysis']['confidence'] * 100:.0f}%
+Subject Type: {violation['ai_analysis'].get('subject_type', 'player')}
+
+Explanation:
+{violation['ai_analysis']['explanation']}
+
+Recommended Action:
+{violation['ai_analysis']['action']}
+
+Evidence:
+Frame: s3://sports-security-evidence/{s3_prefix}/frame.jpg
+"""
+        
+        s3.put_object(
+            Bucket='sports-security-evidence',
+            Key=f"{s3_prefix}/description.txt",
+            Body=description.encode('utf-8'),
+            ContentType='text/plain'
+        )
+        
+        evidence_url = f"s3://sports-security-evidence/{s3_prefix}/"
+        print(f"   📁 Stored: {date_folder}/{time_folder}/{violation_id}/")
+        
     except Exception as e:
         print(f"   ⚠️  Failed to store evidence: {e}")
         evidence_url = None
