@@ -211,6 +211,7 @@ def store_violation(violation, frame):
             'severity': violation['ai_analysis']['severity'],
             'valid': violation['ai_analysis']['valid'],
             'confidence': str(violation['ai_analysis']['confidence']),
+            'subject_type': violation['ai_analysis'].get('subject_type', 'player'),
             'action': violation['ai_analysis']['action'],
             'explanation': violation['ai_analysis']['explanation'],
             'evidence_url': evidence_url,
