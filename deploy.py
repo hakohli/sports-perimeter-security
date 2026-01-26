@@ -36,8 +36,9 @@ def create_s3_bucket():
             Bucket=bucket_name,
             LifecycleConfiguration={
                 'Rules': [{
-                    'Id': 'DeleteOldEvidence',
+                    'ID': 'DeleteOldEvidence',
                     'Status': 'Enabled',
+                    'Filter': {'Prefix': ''},
                     'Expiration': {'Days': 30}
                 }]
             }
@@ -80,11 +81,7 @@ def create_dynamodb_table():
                 'KeySchema': [
                     {'AttributeName': 'timestamp', 'KeyType': 'HASH'}
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
-                'ProvisionedThroughput': {
-                    'ReadCapacityUnits': 5,
-                    'WriteCapacityUnits': 5
-                }
+                'Projection': {'ProjectionType': 'ALL'}
             }],
             BillingMode='PAY_PER_REQUEST',
             Tags=[
