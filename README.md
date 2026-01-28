@@ -13,41 +13,40 @@ Real-time monitoring system for detecting perimeter breaches and rule violations
 ## Architecture
 
 ```
-Video Streams → Kinesis Video → Frame Extraction → MSK (Kafka)
-                                                      ↓
-                                                   Flink
-                                                   (Detection)
-                                                      ↓
-                                                  AI Agent
-                                                  (Bedrock)
-                                                      ↓
-                                              DynamoDB + SNS
-                                              (Alerts)
+Video Streams → Kinesis Video Streams → Managed Flink 1.20 → Bedrock (Claude 3.5 Sonnet v2)
+                                              ↓
+                                         MSK 3.8.x (Kafka)
+                                              ↓
+                                    ┌─────────┴─────────┐
+                                    ↓                   ↓
+                              DynamoDB              S3 + SNS
+                           (Violations)         (Evidence + Alerts)
 ```
 
 ## Components
 
-### 1. **Video Ingestion**
-- Kinesis Video Streams for live game feeds
-- Frame extraction (1 FPS for analysis)
-- Metadata: timestamp, camera angle, game context
+### 1. **Kinesis Video Streams (KVS)**
+- Ingests live video feeds (H.264)
+- 24-hour retention
+- Real-time streaming to Flink
 
-### 2. **MSK (Kafka)**
+### 2. **Managed Service for Apache Flink 1.20**
+- Extracts frames from KVS (1 FPS)
+- Processes video in real-time
+- Integrates with Bedrock for AI analysis
+- Produces violation events to MSK
+
+### 3. **Amazon MSK 3.8.x (Kafka)**
+- 3 broker cluster (kafka.m5.large)
+- IAM authentication
 - Topics:
-  - `game-frames` - Extracted video frames
-  - `violations` - Detected violations
-  - `perimeter-events` - Boundary crossings
+  - `violations` - Detected violations with 100% confidence
 
-### 3. **Flink Processing**
-- Computer vision preprocessing
-- Perimeter boundary detection
-- Player/object tracking
-- Rule violation detection
-
-### 4. **AI Agent (Bedrock)**
-- Claude 3.5 Sonnet for visual analysis
-- Violation classification
-- Context-aware decision making
+### 4. **Amazon Bedrock**
+- Claude 3.5 Sonnet v2 (`us.anthropic.claude-3-5-sonnet-20241022-v2:0`)
+- 100% confidence requirement
+- Player-only violation detection
+- Context-aware analysis
 - False positive reduction
 
 ### 5. **MCP Server**
